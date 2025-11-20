@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard | Violencia contra la mujer en el contexto de pareja</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Bootstrap -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Leaflet (mapa) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { background: #f7f8fa; }
+    .kpi-card {
+      background: white; border: 1px solid #e6e6e6; border-radius: 12px; padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+    .kpi-value { font-size: 1.8rem; font-weight: 700; }
+    .kpi-label { font-size: 0.9rem; color: #666; }
+    #map { height: 420px; border-radius: 12px; border: 1px solid #e6e6e6; }
+    .section-card {
+      background: white; border: 1px solid #e6e6e6; border-radius: 12px; padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+    .filter-badge { font-size: 0.85rem; color: #444; }
+    .footer-note { font-size: 0.85rem; color: #666; }
+    .legend { font-size: 0.85rem; color: #444; }
+  </style>
+</head>
+<body>
+  <div class="container-fluid py-4">
+    <!-- Encabezado -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <h1 class="h3 mb-1">Violencia contra la mujer en el contexto de pareja</h1>
+        <p class="text-muted mb-0">
+          Explorá prevalencia, características sociodemográficas, tipos de violencia, respuesta institucional y distribución geográfica con filtros interactivos.
+        </p>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="row g-3 mb-3">
+      <div class="col-12 section-card">
+        <div class="row g-3 align-items-end">
+          <div class="col-12 col-md-3">
+            <label for="filterYear" class="form-label">Año</label>
+            <select id="filterYear" class="form-select">
+              <option value="all" selected>Todos</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label for="filterProvince" class="form-label">Provincia</label>
+            <select id="filterProvince" class="form-select">
+              <option value="all" selected>Todas</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label for="filterType" class="form-label">Tipo de violencia</label>
+            <select id="filterType" class="form-select">
+              <option value="all" selected>Todas</option>
+              <option>Física</option>
+              <option>Psicológica</option>
+              <option>Sexual</option>
+              <option>Económica</option>
+              <option>Simbólica</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <button id="resetFilters" class="btn btn-outline-secondary w-100">Reiniciar filtros</button>
+          </div>
+        </div>
+        <div class="mt-2">
+          <span class="filter-badge">Filtro activo → <span id="activeFiltersText">Año: Todos · Provincia: Todas · Tipo: Todas</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-md-3">
+        <div class="kpi-card">
+          <div class="kpi-label">Denuncias registradas</div>
+          <div id="kpiCases" class="kpi-value">—</div>
+          <div class="legend">Total de casos en el período seleccionado</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="kpi-card">
+          <div class="kpi-label">% con medidas de protección</div>
+          <div id="kpiProtection" class="kpi-value">—</div>
+          <div class="legend">Proporción de casos con medidas cautelares</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="kpi-card">
+          <div class="kpi-label">% con sentencia</div>
+          <div id="kpiSentences" class="kpi-value">—</div>
+          <div class="legend">Casos con resolución judicial</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="kpi-card">
+          <div class="kpi-label">Edad mediana de víctimas</div>
+          <div id="kpiMedianAge" class="kpi-value">—</div>
+          <div class="legend">Grupo etario predominante</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Serie temporal y mapa -->
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-xl-7">
+        <div class="section-card">
+          <h2 class="h6 mb-3">Tendencia temporal de denuncias</h2>
+          <canvas id="timeSeriesChart" height="140"></canvas>
+        </div>
+      </div>
+      <div class="col-12 col-xl-5">
+        <div class="section-card">
+          <h2 class="h6 mb-3">Distribución geográfica</h2>
+          <div id="map"></div>
+          <div class="footer-note mt-2">
+            Nota: mapa ilustrativo con conteos por provincia (nivel agregado).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tipos de violencia y perfil -->
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-xl-6">
+        <div class="section-card">
+          <h2 class="h6 mb-3">Tipos de violencia</h2>
+          <canvas id="stackedTypesChart" height="140"></canvas>
+        </div>
+      </div>
+      <div class="col-12 col-xl-6">
+        <div class="section-card">
+          <h2 class="h6 mb-3">Relación víctima–agresor</h2>
+          <canvas id="relationPieChart" height="140"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Respuesta institucional -->
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="section-card">
+          <h2 class="h6 mb-3">Respuesta institucional</h2>
+          <div class="row">
+            <div class="col-12 col-lg-6 mb-3">
+              <canvas id="protectionBarChart" height="120"></canvas>
+              <div class="legend mt-2">Medidas de protección: botón antipánico, restricción de acercamiento, perímetro</div>
+            </div>
+            <div class="col-12 col-lg-6 mb-3">
+              <canvas id="processStageChart" height="120"></canvas>
+              <div class="legend mt-2">Flujo de casos: denuncia → en trámite → sentencia → archivo</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fuentes y notas -->
+    <div class="row">
+      <div class="col-12">
+        <div class="section-card">
+          <h2 class="h6 mb-2">Fuentes y notas</h2>
+          <ul>
+            <li><strong>Base conceptual:</strong> SICVG (Argentina), OVD (CSJN), datos abiertos y reportes oficiales.</li>
+            <li><strong>Demo:</strong> Estos datos son ficticios a modo de ejemplo. Reemplazá por CSV/Excel/APIs reales.</li>
+            <li><strong>Actualización:</strong> Ideal mensual (SICVG) y anual (informes).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ------------------------------
+    // DEMO DATASET (ficticio)
+    // Estructura: id_caso, fecha_denuncia, provincia, municipio, tipo_violencia,
+    // edad_victima, sexo_victima, relacion_agresor, medida_proteccion, resultado_judicial, lesiones_registradas, fuente
+    // ------------------------------
+    const demoData = [
+      {id:"2023-BA-0001", fecha:"2023-01-14", provincia:"Buenos Aires", municipio:"Quilmes", tipo:"Física", edad:32, sexo:"Mujer", relacion:"Pareja", medida:"Restricción de acercamiento", resultado:"En trámite", lesiones:true, fuente:"SICVG"},
+      {id:"2023-BA-0002", fecha:"2023-01-21", provincia:"Buenos Aires", municipio:"Lanús", tipo:"Psicológica", edad:28, sexo:"Mujer", relacion:"Ex pareja", medida:"Botón antipánico", resultado:"Sentencia", lesiones:false, fuente:"SICVG"},
+      {id:"2023-CBA-0003", fecha:"2023-02-03", provincia:"Córdoba", municipio:"Córdoba", tipo:"Económica", edad:41, sexo:"Mujer", relacion:"Pareja", medida:null, resultado:"En trámite", lesiones:false, fuente:"OVD"},
+      {id:"2023-SF-0004", fecha:"2023-02-18", provincia:"Santa Fe", municipio:"Rosario", tipo:"Física", edad:36, sexo:"Mujer", relacion:"Ex pareja", medida:"Perímetro", resultado:"Archivo", lesiones:true, fuente:"SICVG"},
+      {id:"2023-BA-0005", fecha:"2023-03-09", provincia:"Buenos Aires", municipio:"Avellaneda", tipo:"Psicológica", edad:22, sexo:"Mujer", relacion:"Novio", medida:null, resultado:"En trámite", lesiones:false, fuente:"SICVG"},
+      {id:"2023-CBA-0006", fecha:"2023-04-11", provincia:"Córdoba", municipio:"Villa Carlos Paz", tipo:"Sexual", edad:29, sexo:"Mujer", relacion:"Pareja", medida:"Restricción de acercamiento", resultado:"Sentencia", lesiones:true, fuente:"SICVG"},
+      {id:"2023-SF-0007", fecha:"2023-05-27", provincia:"Santa Fe", municipio:"Santa Fe", tipo:"Simbólica", edad:45, sexo:"Mujer", relacion:"Ex pareja", medida:null, resultado:"En trámite", lesiones:false, fuente:"SICVG"},
+      {id:"2024-BA-0008", fecha:"2024-01-15", provincia:"Buenos Aires", municipio:"Quilmes", tipo:"Física", edad:34, sexo:"Mujer", relacion:"Pareja", medida:"Botón antipánico", resultado:"En trámite", lesiones:true, fuente:"SICVG"},
+      {id:"2024-CBA-0009", fecha:"2024-02-02", provincia:"Córdoba", municipio:"Córdoba", tipo:"Psicológica", edad:27, sexo:"Mujer", relacion:"Ex pareja", medida:"Restricción de acercamiento", resultado:"Sentencia", lesiones:false, fuente:"OVD"},
+      {id:"2024-SF-0010", fecha:"2024-03-22", provincia:"Santa Fe", municipio:"Rosario", tipo:"Económica", edad:39, sexo:"Mujer", relacion:"Pareja", medida:null, resultado:"En trámite", lesiones:false, fuente:"SICVG"},
+      {id:"2024-BA-0011", fecha:"2024-04-30", provincia:"Buenos Aires", municipio:"Avellaneda", tipo:"Sexual", edad:31, sexo:"Mujer", relacion:"Ex pareja", medida:"Perímetro", resultado:"Archivo", lesiones:true, fuente:"SICVG"},
+      {id:"2024-CBA-0012", fecha:"2024-05-12", provincia:"Córdoba", municipio:"Villa Carlos Paz", tipo:"Física", edad:24, sexo:"Mujer", relacion:"Novio", medida:null, resultado:"En trámite", lesiones:true, fuente:"SICVG"}
+    ];
+
+    // ------------------------------
+    // Utilidades
+    // ------------------------------
+    const monthsES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    function getYear(dateStr){ return new Date(dateStr).getFullYear(); }
+    function getMonth(dateStr){ return new Date(dateStr).getMonth(); }
+
+    function unique(arr){ return [...new Set(arr)]; }
+
+    function median(values){
+      if(!values.length) return null;
+      const s = [...values].sort((a,b)=>a-b);
+      const mid = Math.floor(s.length/2);
+      return s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
+    }
+
+    function formatPct(n){
+      if(n === null || isNaN(n)) return "—";
+      return (n*100).toFixed(1)+"%";
+    }
+
+    // ------------------------------
+    // Estado y filtros
+    // ------------------------------
+    const state = {
+      year: "all",
+      province: "all",
+      type: "all",
+    };
+
+    // Inicializar opciones de filtros desde datos
+    function initFilters(){
+      const years = unique(demoData.map(d=>getYear(d.fecha))).sort();
+      const provinces = unique(demoData.map(d=>d.provincia)).sort();
+      const yearSel = document.getElementById("filterYear");
+      const provSel = document.getElementById("filterProvince");
+
+      years.forEach(y=>{
+        const opt = document.createElement("option");
+        opt.value = String(y);
+        opt.textContent = String(y);
+        yearSel.appendChild(opt);
+      });
+
+      provinces.forEach(p=>{
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = p;
+        provSel.appendChild(opt);
+      });
+    }
+
+    function applyFilters(data){
+      return data.filter(d=>{
+        const byYear = state.year === "all" ? true : getYear(d.fecha) === Number(state.year);
+        const byProv = state.province === "all" ? true : d.provincia === state.province;
+        const byType = state.type === "all" ? true : d.tipo === state.type;
+        return byYear && byProv && byType;
+      });
+    }
+
+    function updateActiveFiltersText(){
+      const t = `Año: ${state.year === "all" ? "Todos" : state.year} · Provincia: ${state.province === "all" ? "Todas" : state.province} · Tipo: ${state.type === "all" ? "Todas" : state.type}`;
+      document.getElementById("activeFiltersText").textContent = t;
+    }
+
+    // ------------------------------
+    // KPIs
+    // ------------------------------
+    function updateKPIs(data){
+      // Total de casos
+      document.getElementById("kpiCases").textContent = data.length.toString();
+
+      // % con medidas de protección
+      const withProtection = data.filter(d=>!!d.medida).length;
+      const pctProt = data.length ? withProtection / data.length : null;
+      document.getElementById("kpiProtection").textContent = formatPct(pctProt);
+
+      // % con sentencia
+      const withSentence = data.filter(d=>d.resultado === "Sentencia").length;
+      const pctSent = data.length ? withSentence / data.length : null;
+      document.getElementById("kpiSentences").textContent = formatPct(pctSent);
+
+      // Edad mediana
+      const medAge = median(data.map(d=>d.edad));
+      document.getElementById("kpiMedianAge").textContent = medAge ? medAge.toString() : "—";
+    }
+
+    // ------------------------------
+    // Gráficos
+    // ------------------------------
+    let timeSeriesChart, stackedTypesChart, relationPieChart, protectionBarChart, processStageChart;
+
+    function buildTimeSeries(data){
+      const months = Array.from({length:12}, (_,i)=>i);
+      const counts = months.map(m=> data.filter(d=>getMonth(d.fecha)===m).length );
+      const labels = months.map(m=>monthsES[m]);
+
+      const conf = {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Denuncias',
+            data: counts,
+            borderColor: '#1f7a8c',
+            backgroundColor: 'rgba(31, 122, 140, 0.15)',
+            tension: 0.25,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      };
+
+      if(timeSeriesChart) timeSeriesChart.destroy();
+      timeSeriesChart = new Chart(document.getElementById("timeSeriesChart"), conf);
+    }
+
+    function buildStackedTypes(data){
+      // Por grupo etario (<=25, 26-35, 36-45, 46+)
+      const groups = [
+        {label:"≤25", fn:(e)=>e<=25},
+        {label:"26–35", fn:(e)=>e>=26 && e<=35},
+        {label:"36–45", fn:(e)=>e>=36 && e<=45},
+        {label:"46+", fn:(e)=>e>=46},
+      ];
+      const tipos = ["Física","Psicológica","Sexual","Económica","Simbólica"];
+      const colors = {
+        "Física":"#ef476f",
+        "Psicológica":"#ffd166",
+        "Sexual":"#118ab2",
+        "Económica":"#06d6a0",
+        "Simbólica":"#8338ec"
+      };
+
+      const labels = groups.map(g=>g.label);
+      const datasets = tipos.map(t=>{
+        return {
+          label: t,
+          data: groups.map(g=> data.filter(d=> t===d.tipo && g.fn(d.edad)).length ),
+          backgroundColor: colors[t],
+          borderRadius: 4
+        };
+      });
+
+      const conf = {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          scales: {
+            x: { stacked: true },
+            y: { stacked: true, beginAtZero: true }
+          },
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      };
+
+      if(stackedTypesChart) stackedTypesChart.destroy();
+      stackedTypesChart = new Chart(document.getElementById("stackedTypesChart"), conf);
+    }
+
+    function buildRelationPie(data){
+      const relaciones = ["Pareja","Ex pareja","Novio"];
+      const counts = relaciones.map(r=> data.filter(d=>d.relacion===r).length );
+      const conf = {
+        type: 'doughnut',
+        data: {
+          labels: relaciones,
+          datasets: [{
+            data: counts,
+            backgroundColor: ["#118ab2","#ef476f","#06d6a0"]
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      };
+
+      if(relationPieChart) relationPieChart.destroy();
+      relationPieChart = new Chart(document.getElementById("relationPieChart"), conf);
+    }
+
+    function buildProtectionBar(data){
+      const medidas = ["Botón antipánico","Restricción de acercamiento","Perímetro","Sin medida"];
+      const counts = medidas.map(m=>{
+        if(m==="Sin medida") return data.filter(d=>!d.medida).length;
+        return data.filter(d=>d.medida===m).length;
+      });
+      const conf = {
+        type: 'bar',
+        data: {
+          labels: medidas,
+          datasets: [{
+            label: 'Casos',
+            data: counts,
+            backgroundColor: '#1f7a8c',
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } }
+        }
+      };
+
+      if(protectionBarChart) protectionBarChart.destroy();
+      protectionBarChart = new Chart(document.getElementById("protectionBarChart"), conf);
+    }
+
+    function buildProcessStage(data){
+      const stages = ["Denuncia","En trámite","Sentencia","Archivo"];
+      const counts = [
+        data.length,
+        data.filter(d=>d.resultado==="En trámite").length,
+        data.filter(d=>d.resultado==="Sentencia").length,
+        data.filter(d=>d.resultado==="Archivo").length
+      ];
+      const conf = {
+        type: 'bar',
+        data: {
+          labels: stages,
+          datasets: [{
+            label: 'Casos',
+            data: counts,
+            backgroundColor: ['#118ab2','#ffd166','#06d6a0','#ef476f'],
+            borderRadius: 8
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true } }
+        }
+      };
+
+      if(processStageChart) processStageChart.destroy();
+      processStageChart = new Chart(document.getElementById("processStageChart"), conf);
+    }
+
+    // ------------------------------
+    // Mapa (Leaflet) con conteos por provincia
+    // ------------------------------
+    let map, markersLayer;
+    const provinceCoords = {
+      "Buenos Aires": [-34.61, -58.42],
+      "Córdoba": [-31.41, -64.19],
+      "Santa Fe": [-31.63, -60.70]
+    };
+
+    function initMap(){
+      map = L.map('map').setView([-38.4161, -63.6167], 4.6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 10,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+    }
+
+    function updateMap(data){
+      markersLayer.clearLayers();
+      // Conteos por provincia
+      const counts = {};
+      data.forEach(d=>{
+        counts[d.provincia] = (counts[d.provincia]||0)+1;
+      });
+      Object.keys(counts).forEach(p=>{
+        if(!provinceCoords[p]) return;
+        const [lat,lng] = provinceCoords[p];
+        const circle = L.circleMarker([lat,lng], {
+          radius: Math.max(6, Math.min(18, counts[p]*2)),
+          color: '#1f7a8c',
+          fillColor: '#1f7a8c',
+          fillOpacity: 0.35,
+          weight: 2
+        }).bindPopup(`<strong>${p}</strong><br/>Casos: ${counts[p]}`);
+        markersLayer.addLayer(circle);
+      });
+    }
+
+    // ------------------------------
+    // Render general
+    // ------------------------------
+    function renderAll(){
+      const filtered = applyFilters(demoData);
+      updateActiveFiltersText();
+      updateKPIs(filtered);
+      buildTimeSeries(filtered);
+      buildStackedTypes(filtered);
+      buildRelationPie(filtered);
+      buildProtectionBar(filtered);
+      buildProcessStage(filtered);
+      updateMap(filtered);
+    }
+
+    // ------------------------------
+    // Eventos
+    // ------------------------------
+    document.addEventListener("DOMContentLoaded", ()=>{
+      initFilters();
+      initMap();
+
+      document.getElementById("filterYear").addEventListener("change", (e)=>{
+        state.year = e.target.value;
+        renderAll();
+      });
+      document.getElementById("filterProvince").addEventListener("change", (e)=>{
+        state.province = e.target.value;
+        renderAll();
+      });
+      document.getElementById("filterType").addEventListener("change", (e)=>{
+        state.type = e.target.value;
+        renderAll();
+      });
+      document.getElementById("resetFilters").addEventListener("click", ()=>{
+        state.year = "all";
+        state.province = "all";
+        state.type = "all";
+        document.getElementById("filterYear").value = "all";
+        document.getElementById("filterProvince").value = "all";
+        document.getElementById("filterType").value = "all";
+        renderAll();
+      });
+
+      renderAll();
+    });
+
+    // ------------------------------
+    // NOTA: Para usar datos reales
+    // - Reemplazá 'demoData' cargando CSV/JSON desde tus fuentes (SICVG, OVD)
+    // - Normalizá campos a las columnas del esquema base
+    // - Ajustá provinceCoords para más provincias o usá GeoJSON
+    // ------------------------------
+  </script>
+</body>
+</html>
